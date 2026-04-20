@@ -23,23 +23,44 @@ DARK_THEME_QSS = """
 QMainWindow { background-color: #0d1117; }
 QWidget { background-color: #0d1117; font-family: 'Segoe UI', Arial, sans-serif; }
 
-QTabWidget::pane { border: 1px solid #30363d; background-color: #161b22; border-radius: 4px; }
-QTabBar::tab { background: #161b22; color: #8b949e; padding: 12px 28px; border: 1px solid #30363d; border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; margin-right: 4px; font-size: 16px; font-weight: bold; }
-QTabBar::tab:selected { background: #0d1117; color: #58a6ff; border-top: 3px solid #58a6ff; }
+QTabWidget::pane {
+    border-top: 2px solid #30363d;
+    background-color: #161b22;
+}
+QTabBar::tab {
+    background: #161b22;
+    color: #8b949e;
+    padding: 12px 26px;
+    border: none;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    margin-right: 6px;
+    font-size: 16px;
+    font-weight: bold;
+    min-width: 150px;
+}
+
+QTabBar::tab:selected {
+    background: #0d1117;
+    color: #58a6ff;
+    border-bottom: 2px solid #58a6ff;
+}
 
 QLabel { color: #B0BEC5; font-size: 13px; }
 QLabel#UnitLabel { color: #78909C; font-size: 11px; }
 QLabel#CardTitle { color: #58a6ff; font-size: 18px; font-weight: bold; padding-bottom: 5px; }
 
 QLineEdit, QComboBox { 
-    background-color: #0d1117; 
-    border: 1px solid #30363d; 
-    padding: 8px; 
-    border-radius: 4px; 
-    color: #FFFFFF; 
-    font-family: Consolas, monospace; 
-    font-size: 14px; 
-    font-weight: 600; 
+    background-color: #0d1117;
+    border: 1px solid #30363d;
+    padding: 6px 10px;
+    border-radius: 4px;
+    color: #FFFFFF;
+    font-family: Consolas, monospace;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 32px;
+    max-width: 350px;
 }
 QLineEdit:focus, QComboBox:focus { border: 1px solid #58a6ff; }
 
@@ -58,6 +79,16 @@ QPushButton#btnReset { background-color: #21262d; border: 1px solid #30363d; col
 QPushButton#btnReset:hover { background-color: #30363d; border: 1px solid #8b949e; color: white;}
 
 QScrollArea { border: none; background-color: transparent; }
+QComboBox::drop-down {
+    border: none;
+    width: 25px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #0d1117;
+    color: white;
+    border: 1px solid #30363d;
+}
 """
 
 class MatplotlibCanvas(FigureCanvas):
@@ -252,7 +283,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Two-Stage Light Gas Gun Simulator - Professional Edition")
-        self.setGeometry(50, 50, 1680, 1000)
+        self.resize(1800, 1050)
         self.setStyleSheet(DARK_THEME_QSS)
         
         self.res_labels = {}
@@ -266,8 +297,16 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(15, 15, 15, 15)
         
         self.main_tabs = QTabWidget()
+
+# Fix tab compression
+        self.main_tabs.setUsesScrollButtons(True)
+        self.main_tabs.setElideMode(Qt.ElideNone)
+        self.main_tabs.tabBar().setExpanding(False)
+        self.main_tabs.setTabPosition(QTabWidget.North)
+        self.main_tabs.setDocumentMode(True)
+
         main_layout.addWidget(self.main_tabs)
-        
+                
         self.tab_setup = QWidget(); self.build_tab_setup(); self.main_tabs.addTab(self.tab_setup, "SETUP")
         self.tab_sim = QWidget(); self.build_tab_simulation(); self.main_tabs.addTab(self.tab_sim, "SIMULATION")
         self.tab_res = QWidget(); self.build_tab_results(); self.main_tabs.addTab(self.tab_res, "RESULTS")
@@ -280,53 +319,73 @@ class MainWindow(QMainWindow):
         self.anim_data = {}
 
     def create_setup_card(self, title):
+
         card = QFrame()
         card.setObjectName("SetupCard")
-        l = QVBoxLayout(card)
-        l.setContentsMargins(20, 20, 20, 20)
-        
-        t_lbl = QLabel(title)
-        t_lbl.setObjectName("CardTitle")
-        l.addWidget(t_lbl)
-        
-        grid_w = QWidget()
-        grid = QGridLayout(grid_w)
-        grid.setSpacing(15)
-        grid.setColumnMinimumWidth(0, 180)
-        grid.setColumnStretch(1, 1)
-        grid.setColumnMinimumWidth(2, 60)
-        l.addWidget(grid_w)
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(20,20,20,20)
+
+        title_lbl = QLabel(title)
+        title_lbl.setObjectName("CardTitle")
+        layout.addWidget(title_lbl)
+
+        grid_container = QWidget()
+        grid = QGridLayout(grid_container)
+
+        grid.setSpacing(12)
+
+        # column sizes
+        grid.setColumnStretch(0,0)   # label
+        grid.setColumnStretch(1,1)   # input
+        grid.setColumnStretch(2,0)   # unit
+
+        grid.setColumnMinimumWidth(0,220)
+        grid.setColumnMinimumWidth(1,300)
+        grid.setColumnMinimumWidth(2,80)
+
+        layout.addWidget(grid_container)
+
         return card, grid
         
     def add_input_row(self, layout, row_idx, label, unit, default_val, readonly=False):
-        lbl = QLabel(label)
-        u_lbl = QLabel(f"{unit}" if unit else "")
-        u_lbl.setObjectName("UnitLabel")
-        u_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        
-        if default_val == "dropdown":
-            inp = QComboBox()
-            inp.addItems(["Hydrogen", "Helium", "Nitrogen"])
-            inp.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            layout.addWidget(lbl, row_idx, 0)
-            layout.addWidget(inp, row_idx, 1)
-            layout.addWidget(u_lbl, row_idx, 2)
-            return inp
-        else:
-            inp = QLineEdit(default_val)
-            inp.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            inp.setAlignment(Qt.AlignLeft)
-            
-            if readonly:
-                inp.setReadOnly(True)
-                inp.setStyleSheet("background-color: #21262d; color: #8b949e; border: 1px solid #30363d; padding: 8px; border-radius: 4px; font-family: Consolas, monospace; font-size: 14px; font-weight: 600;")
-                inp.setToolTip("This parameter is automatically set based on physics model")
-                
-            layout.addWidget(lbl, row_idx, 0)
-            layout.addWidget(inp, row_idx, 1)
-            layout.addWidget(u_lbl, row_idx, 2)
-            return inp
 
+        label_widget = QLabel(label)
+
+        unit_widget = QLabel(unit if unit else "")
+        unit_widget.setObjectName("UnitLabel")
+
+        # dropdown
+        if default_val == "dropdown":
+
+            input_widget = QComboBox()
+            input_widget.addItems(["Hydrogen","Helium","Nitrogen"])
+
+            input_widget.setMinimumHeight(34)
+            input_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        else:
+
+            input_widget = QLineEdit(default_val)
+
+            input_widget.setMinimumHeight(34)
+            input_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+            if readonly:
+                input_widget.setReadOnly(True)
+                input_widget.setStyleSheet("""
+                    background-color:#21262d;
+                    color:#8b949e;
+                    border:1px solid #30363d;
+                    padding:8px;
+                    border-radius:4px;
+                """)
+
+        layout.addWidget(label_widget,row_idx,0)
+        layout.addWidget(input_widget,row_idx,1)
+        layout.addWidget(unit_widget,row_idx,2)
+
+        return input_widget
     def compute_bounds(self):
         try:
             D3 = float(self.inp_D3.text())

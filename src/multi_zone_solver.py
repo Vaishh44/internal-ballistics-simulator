@@ -70,6 +70,7 @@ class MultiZoneSolver:
         self.e_heat_loss = 0.0
         self.e_leak_loss = 0.0
         
+        
     def step(self):
         # 1. Gas Generation from Powder
         if self.powder.z < 1.0:
@@ -141,7 +142,7 @@ class MultiZoneSolver:
         self.P_pump = max(1000.0, (self.gas.gamma - 1.0) * self.U_pump / self.V_pump)
         
         # 5. Valve Burst & Flow
-        burst_threshold = self.shot.valve_burst_pressure * 1e5 if self.shot.valve_burst_pressure < 1e6 else self.shot.valve_burst_pressure
+        burst_threshold = self.shot.valve_burst_pressure  if self.shot.valve_burst_pressure < 1e6 else self.shot.valve_burst_pressure
         if self.P_pump >= burst_threshold and self.burst_time < 0:
             self.burst_time = self.t
             
@@ -161,12 +162,25 @@ class MultiZoneSolver:
             rho_pump = self.m_pump / self.V_pump if self.V_pump > 0 else 1.0
             dP = max(self.P_pump - self.P_launch, 0.0)
             
-            m_dot = self.shot.cd_valve * A_val * math.sqrt(2.0 * rho_pump * dP)
+            from src.valve_flow import mass_flow_rate
+
+            m_dot = mass_flow_rate(
+    self.P_pump,
+    self.P_launch,
+    self.T_pump,
+    self.gas.gamma,
+    self.gas.R_specific,
+    A_val,
+    self.shot.cd_valve
+)
             dm_flow = m_dot * self.dt
             if dm_flow > self.m_pump * 0.9: dm_flow = self.m_pump * 0.9
             
-            dU_flow = dm_flow * self.gas.cp * self.T_pump
-            
+            rho_pump = self.m_pump / self.V_pump
+            h = self.gas.cv * self.T_pump + self.P_pump / rho_pump
+
+            dU_flow = dm_flow * h
+
             self.m_pump -= dm_flow
             self.m_launch += dm_flow
             self.U_pump -= dU_flow
@@ -181,8 +195,14 @@ class MultiZoneSolver:
         
         # 7. Projectile Motion with Delay & Friction
         if self.valve_open:
-            P_eff = self.P_launch * (1.0 - math.exp(-self.t_open / self.tau_proj))
-            
+            a_sound = np.sqrt(self.gas.gamma * self.gas.R_specific * self.T_launch)
+
+            Mach = self.v_proj / max(a_sound,1e-6)
+
+            P_eff = self.P_launch * (1 - (self.gas.gamma - 1)/2 * Mach**2)
+
+            P_eff *= (1.0 - math.exp(-self.t_open / self.tau_proj))
+                        
             fric_proj = self.shot.projectile_friction_coeff * (P_eff * self.A_launch) + self.c_damp * self.v_proj
             fric_proj = math.copysign(fric_proj, self.v_proj) if self.v_proj != 0 else fric_proj
             
