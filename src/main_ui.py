@@ -355,6 +355,8 @@ class MainWindow(QMainWindow):
         unit_widget = QLabel(unit if unit else "")
         unit_widget.setObjectName("UnitLabel")
 
+#Adding Stuff 
+
         # dropdown
         if default_val == "dropdown":
 
