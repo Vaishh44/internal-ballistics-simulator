@@ -40,3 +40,26 @@ class ShotParameters:
         self.projectile_friction_coeff = projectile_friction_coeff
         
         self.powder_type_reference = powder_type_reference
+    def sanity_check(shot, gas):
+
+        warnings = []
+
+        # Burst disk impossible to rupture
+        if shot.initial_gas_pressure * 2 < shot.valve_burst_pressure:
+            warnings.append(
+                "Burst pressure too high — valve may never open."
+            )
+
+        # Projectile heavier than piston (bad physics)
+        if shot.projectile_mass > shot.piston_mass:
+            warnings.append(
+                "Projectile mass larger than piston mass."
+            )
+
+        # Very low gas pressure
+        if shot.initial_gas_pressure < 10:
+            warnings.append(
+                "Initial gas pressure very low for light gas gun."
+            )
+
+        return warnings

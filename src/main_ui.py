@@ -207,78 +207,159 @@ class AnimationCanvas(FigureCanvas):
         self.barrier_line = None
         
         self.cmap = cm.get_cmap('coolwarm')
-        self.norm = mcolors.Normalize(vmin=1.0, vmax=4500.0)
+        self.norm = mcolors.Normalize(vmin=1.0, vmax=600.0)
 
-    def setup_scene(self, L1, L2, L3, D1, D2, D3):
+    def setup_scene(self, L1, L2, L_hpv, L3, D1, D2, D_hpv, D3):
+
         self.ax.clear()
-        
-        total_L = L1 + L2 + L3
-        max_D = max(D1, max(D2, D3))
+
+        total_L = L1 + L2 + L_hpv + L3
+        max_D = max(D1, D2, D_hpv, D3)
+
         self.ax.set_ylim(-max_D*4.5, max_D*4.5)
         self.ax.set_xlim(-L1 - 0.5, total_L - L1 + 0.5)
-        
+
         self.ax.spines['bottom'].set_position(('data', -max_D*3))
         self.ax.spines['top'].set_color('none')
         self.ax.spines['left'].set_color('none')
         self.ax.spines['right'].set_color('none')
         self.ax.set_yticks([])
-        
+
+        # ---------------- CHAMBER ----------------
+
         ch_top, ch_bot = D1/2, -D1/2
         self.ax.plot([-L1, 0], [ch_top, ch_top], color='#B0BEC5', lw=3)
         self.ax.plot([-L1, 0], [ch_bot, ch_bot], color='#B0BEC5', lw=3)
-        self.ch_patch = patches.Rectangle((-L1, ch_bot), L1, D1, color=self.cmap(self.norm(1.0)), alpha=0.7, zorder=2)
+
+        self.ch_patch = patches.Rectangle((-L1, ch_bot), L1, D1,
+            color=self.cmap(self.norm(1.0)), alpha=0.7)
+
         self.ax.add_patch(self.ch_patch)
-        self.ax.text(-L1/2, ch_top*1.2, "Chamber", color='#B0BEC5', ha='center', va='bottom', fontsize=12, weight='bold')
-        
+
+        self.ax.text(-L1/2, ch_top*1.2, "Chamber",
+            color='#B0BEC5', ha='center', fontsize=12, weight='bold')
+
+        # ---------------- PUMP TUBE ----------------
+
         p_top, p_bot = D2/2, -D2/2
+
         self.ax.plot([0, L2], [p_top, p_top], color='#8b949e', lw=3)
         self.ax.plot([0, L2], [p_bot, p_bot], color='#8b949e', lw=3)
-        self.pump_patch = patches.Rectangle((0, p_bot), L2, D2, color=self.cmap(self.norm(1.0)), alpha=0.7, zorder=2)
+
+        self.pump_patch = patches.Rectangle((0, p_bot), L2, D2,
+            color=self.cmap(self.norm(1.0)), alpha=0.7)
+
         self.ax.add_patch(self.pump_patch)
-        self.ax.text(L2/2, p_top*1.2, "Pump Tube", color='#B0BEC5', ha='center', va='bottom', fontsize=12, weight='bold')
-        
+
+        self.ax.text(L2/2, p_top*1.2, "Pump Tube",
+            color='#B0BEC5', ha='center', fontsize=12, weight='bold')
+
+        # ---------------- HPV ----------------
+
+        hpv_start = L2
+        hpv_top = D_hpv/2
+        hpv_bot = -D_hpv/2
+
+        self.ax.plot([hpv_start, hpv_start + L_hpv], [hpv_top, hpv_top], color='#f2cc60', lw=3)
+        self.ax.plot([hpv_start, hpv_start + L_hpv], [hpv_bot, hpv_bot], color='#f2cc60', lw=3)
+
+        self.hpv_patch = patches.Rectangle((hpv_start, hpv_bot), L_hpv, D_hpv,
+            color=self.cmap(self.norm(1.0)), alpha=0.7)
+
+        self.ax.add_patch(self.hpv_patch)
+
+        self.ax.text(hpv_start + L_hpv/2, hpv_top*1.3, "HPV",
+            color='#f2cc60', ha='center', fontsize=12, weight='bold')
+
+        # ---------------- BURST DISK ----------------
+
+        burst_x = L2 + L_hpv
+
+        self.barrier_line = self.ax.vlines(
+            burst_x,
+            p_bot*1.5,
+            p_top*1.5,
+            colors='#d29922',
+            lw=4
+        )
+
+        # ---------------- LAUNCH TUBE ----------------
+
+        launch_start = burst_x
         l_top, l_bot = D3/2, -D3/2
-        self.ax.plot([L2, L2 + L3], [l_top, l_top], color='#484f58', lw=3)
-        self.ax.plot([L2, L2 + L3], [l_bot, l_bot], color='#484f58', lw=3)
-        self.launch_patch = patches.Rectangle((L2, l_bot), L3, D3, color=self.cmap(self.norm(1.0)), alpha=0.7, zorder=2)
+
+        self.ax.plot([launch_start, launch_start + L3], [l_top, l_top], color='#484f58', lw=3)
+        self.ax.plot([launch_start, launch_start + L3], [l_bot, l_bot], color='#484f58', lw=3)
+
+        self.launch_patch = patches.Rectangle((launch_start, l_bot), L3, D3,
+            color=self.cmap(self.norm(1.0)), alpha=0.7)
+
         self.ax.add_patch(self.launch_patch)
-        self.ax.text(L2 + L3/2, l_top*1.2, "Launch Tube", color='#B0BEC5', ha='center', va='bottom', fontsize=12, weight='bold')
-        
-        p_len = max(0.2, min(L2 * 0.08, 1.0))
+
+        self.ax.text(launch_start + L3/2, l_top*1.2, "Launch Tube",
+            color='#B0BEC5', ha='center', fontsize=12, weight='bold')
+
+        # ---------------- PISTON ----------------
+
+        p_len = max(0.2, min(L2*0.08, 1.0))
         self.piston_len = p_len
-        self.piston_patch = patches.Rectangle((-p_len, p_bot*1.2), p_len, D2*1.2, color='#1f6feb', zorder=5)
+
+        self.piston_patch = patches.Rectangle((-p_len, p_bot*1.2),
+            p_len, D2*1.2,
+            color='#1f6feb', zorder=5)
+
         self.ax.add_patch(self.piston_patch)
-        
+
+        # ---------------- PROJECTILE ----------------
+
         proj_rad = max(D3, 0.05)
-        self.proj_patch = patches.Rectangle((L2, l_bot*1.2), proj_rad*2, D3*1.2, color='#2ea043', zorder=6)
+
+        self.proj_patch = patches.Rectangle((burst_x, l_bot*1.2),
+            proj_rad*2, D3*1.2,
+            color='#2ea043', zorder=6)
+
         self.ax.add_patch(self.proj_patch)
-        
-        self.barrier_line = self.ax.vlines(L2, p_bot*1.5, p_top*1.5, colors='#d29922', linestyles='solid', lw=4, zorder=4)
 
         self.draw_idle()
+    def update_positions(self, x_p, x_proj, L1, L2, L_hpv, L3, p1, p2, p3):
 
-    def update_positions(self, x_p, x_proj, L1, L2, L3, p1, p2, p3):
+        # color tubes by pressure
         self.ch_patch.set_color(self.cmap(self.norm(p1)))
         self.pump_patch.set_color(self.cmap(self.norm(p2)))
+        self.hpv_patch.set_color(self.cmap(self.norm(p2)))
         self.launch_patch.set_color(self.cmap(self.norm(p3)))
-        
-        self.piston_patch.set_x(x_p - self.piston_len)
+
+        # ---------------- PISTON ----------------
+        piston_x = -self.piston_len + x_p
+        self.piston_patch.set_x(piston_x)
+
+        # chamber expands
         self.ch_patch.set_width(L1 + x_p)
-        self.pump_patch.set_x(x_p)
-        
-        curr_proj_x = L2 + x_proj
-        self.proj_patch.set_x(curr_proj_x)
-        self.pump_patch.set_width(curr_proj_x - x_p)
-        
-        self.launch_patch.set_x(curr_proj_x)
-        self.launch_patch.set_width(max(0, L2 + L3 - curr_proj_x))
-        
+
+        # ---------------- PUMP ----------------
+        pump_start = x_p
+        pump_end = L2
+
+        self.pump_patch.set_x(pump_start)
+        self.pump_patch.set_width(max(0.0, pump_end - pump_start))
+
+        # ---------------- PROJECTILE ----------------
+        proj_x = L2 + L_hpv + x_proj
+        self.proj_patch.set_x(proj_x)
+
+        # ---------------- LAUNCH GAS ----------------
+        launch_start = proj_x
+        launch_end = L2 + L_hpv + L3
+
+        self.launch_patch.set_x(launch_start)
+        self.launch_patch.set_width(max(0.0, launch_end - launch_start))
+
+        # ---------------- BURST DISK ----------------
         if p2 >= 500 or x_proj > 0:
             self.barrier_line.set_color('#2ea043')
             self.barrier_line.set_linestyle('--')
-            
-        self.draw_idle()
 
+        self.draw_idle()
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -443,6 +524,8 @@ class MainWindow(QMainWindow):
         self.inp_D2 = self.add_input_row(l1, r, "Pump Tube Diameter", "m", "0.10"); r+=1
         self.inp_L3 = self.add_input_row(l1, r, "Launch Tube Length", "m", "8.0"); r+=1
         self.inp_D3 = self.add_input_row(l1, r, "Launch Tube Diameter", "m", "0.036"); r+=1
+        self.inp_L_hpv = self.add_input_row(l1, r, "HPV Length", "m", "0.5"); r+=1
+        self.inp_D_hpv = self.add_input_row(l1, r, "HPV Diameter", "m", "0.04"); r+=1
         self.inp_D3.textChanged.connect(self.compute_bounds)
         view_layout.addWidget(card1)
         
@@ -692,246 +775,250 @@ class MainWindow(QMainWindow):
         layout.addWidget(QLabel("Gas Comparison Analysis Pipeline - Offline", styleSheet="color:#B0BEC5; font-size: 24px; font-weight: bold;"))
 
     def run_simulation(self):
+
         try:
-            # Constraints Validation Checks
+
+            # ----------------------------
+            # VALIDATION CHECKS
+            # ----------------------------
+
             P_burst = float(self.inp_p_burst.text())
             P_init = float(self.inp_P0.text())
             m_pow = float(self.inp_m1.text())
             m_proj = float(self.inp_mproj.text())
 
-            if not (200 <= P_burst <= 1500):
-                raise ValueError(f"CRITICAL BOUNDARY ERROR: Valve Burst Pressure must be strictly between 200 and 1500 bar. (Got {P_burst})")
-            if not (5 <= P_init <= 100):
-                raise ValueError(f"CRITICAL BOUNDARY ERROR: Initial Gas Pressure must be strictly between 5 and 100 bar. (Got {P_init})")
-            if not (0.5 <= m_pow <= 5.0):
-                raise ValueError(f"CRITICAL BOUNDARY ERROR: Powder Mass must be strictly between 0.5 and 5 kg. (Got {m_pow})")
-            if not (0.01 <= m_proj <= 0.2):
-                raise ValueError(f"CRITICAL BOUNDARY ERROR: Projectile Mass must be strictly between 0.01 and 0.2 kg. (Got {m_proj})")
+            
 
-            L1 = float(self.inp_L1.text()); D1 = float(self.inp_D1.text())
-            L2 = float(self.inp_L2.text()); D2 = float(self.inp_D2.text())
-            L3 = float(self.inp_L3.text()); D3 = float(self.inp_D3.text())
-            
-            num_perfs = int(self.inp_num_perfs.text()); outer_rad = float(self.inp_outer_rad.text())
-            inner_rad = float(self.inp_inner_rad.text()); grain_len = float(self.inp_grain_len.text())
-            web_thick = float(self.inp_web_thick.text()); density = float(self.inp_density.text())
-            flame_temp = float(self.inp_flame_temp.text()); energy = float(self.inp_energy.text())
-            poly_ratio = float(self.inp_poly_ratio.text()); covolume = float(self.inp_covolume.text())
-            viva = float(self.inp_viva.text()); alpha = float(self.inp_alpha.text())
-            f = float(self.inp_f.text()); m1 = float(self.inp_m1.text())
-            
-            coeffs_str = self.inp_shape_coeffs.text().split(',')
-            coeffs = [float(c.strip()) for c in coeffs_str] if len(coeffs_str) == 3 else [0.1, 0.5, 0.2, 0.0, 0.0, 0.0]
-            if len(coeffs) < 6: coeffs.extend([0]*(6-len(coeffs)))
-            shape_dict = {'A': coeffs[0], 'B': coeffs[1], 'C': coeffs[2], 'D': coeffs[3], 'E': coeffs[4], 'F': coeffs[5]}
-            
-            powder = PowderModel(num_perfs, outer_rad, inner_rad, grain_len, web_thick, density, flame_temp, energy, poly_ratio, covolume, shape_dict, viva, alpha, f, m1)
-            
+            # ----------------------------
+            # GEOMETRY
+            # ----------------------------
+
+            L1 = float(self.inp_L1.text())
+            D1 = float(self.inp_D1.text())
+
+            L2 = float(self.inp_L2.text())
+            D2 = float(self.inp_D2.text())
+
+            L3 = float(self.inp_L3.text())
+            D3 = float(self.inp_D3.text())
+
+            # HPV section
+            L_hpv = float(self.inp_L_hpv.text())
+            D_hpv = float(self.inp_D_hpv.text())
+
+
+            # ----------------------------
+            # POWDER MODEL
+            # ----------------------------
+
+            coeffs = [float(c.strip()) for c in self.inp_shape_coeffs.text().split(",")]
+            while len(coeffs) < 6:
+                coeffs.append(0.0)
+
+            shape_dict = {
+                'A': coeffs[0],
+                'B': coeffs[1],
+                'C': coeffs[2],
+                'D': coeffs[3],
+                'E': coeffs[4],
+                'F': coeffs[5]
+            }
+
+            powder = PowderModel(
+                int(self.inp_num_perfs.text()),
+                float(self.inp_outer_rad.text()),
+                float(self.inp_inner_rad.text()),
+                float(self.inp_grain_len.text()),
+                float(self.inp_web_thick.text()),
+                float(self.inp_density.text()),
+                float(self.inp_flame_temp.text()),
+                float(self.inp_energy.text()),
+                float(self.inp_poly_ratio.text()),
+                float(self.inp_covolume.text()),
+                shape_dict,
+                float(self.inp_viva.text()),
+                float(self.inp_alpha.text()),
+                float(self.inp_f.text()),
+                float(self.inp_m1.text())
+            )
+
+
+            # ----------------------------
+            # GAS MODEL
+            # ----------------------------
+
             gas_choice = self.cmb_gas.currentText()
+
             gamma = float(self.inp_gamma.text())
             cp = float(self.inp_cp.text())
             cv = float(self.inp_cv.text())
-            molar_mass = 0.004 if "Helium" in gas_choice else (0.002 if "Hydrogen" in gas_choice else 0.028)
-            gas = GasModel(gas_choice.split(" ")[0], gamma, cp, cv, molar_mass)
-            
-            shot = ShotParameters(
-                "Dash Launcher", gas.gas_type, float(self.inp_P0.text()), 300.0, float(self.inp_mp.text()),
-                L2, 1.0, float(self.inp_coeff_p.text()), 0.0, float(self.inp_p_burst.text()),
-                float(self.inp_valve_delay.text()), 0.0, "Air", 300.0, float(self.inp_p_residual.text()),
-                float(self.inp_mproj.text()), float(self.inp_coeff_proj.text()), "Custom",
-                float(self.inp_cd.text()), float(self.inp_a_valve.text())
+
+            if "Hydrogen" in gas_choice:
+                molar_mass = 0.002
+            elif "Helium" in gas_choice:
+                molar_mass = 0.004
+            else:
+                molar_mass = 0.028
+
+            gas = GasModel(
+                gas_choice,
+                gamma,
+                cp,
+                cv,
+                molar_mass
             )
-        except Exception as e:
-            QMessageBox.critical(self, "Invalid Physical Range", str(e))
-            return
-            
-        self.btn_run.setText("COMPUTING..."); self.btn_run.setEnabled(False)
-        self.lbl_sim_status.setText("Iterating differential mass flow states...")
-        self.lbl_sim_status.setStyleSheet("color: #d29922; font-size: 16px; font-style: italic; padding-left: 20px;")
-        QApplication.processEvents()
-        
-        try:
-            solver = MultiZoneSolver(L1, D1, L2, D2, L3, D3, powder, gas, shot)
+
+
+            # ----------------------------
+            # SHOT PARAMETERS
+            # ----------------------------
+
+            shot = ShotParameters(
+                "Launcher",
+                gas.gas_type,
+                float(self.inp_P0.text()),
+                300.0,
+                float(self.inp_mp.text()),
+                L2,
+                1.0,
+                float(self.inp_coeff_p.text()),
+                0.0,
+                float(self.inp_p_burst.text()),
+                float(self.inp_valve_delay.text()),
+                0.0,
+                "Air",
+                300.0,
+                float(self.inp_p_residual.text()),
+                float(self.inp_mproj.text()),
+                float(self.inp_coeff_proj.text()),
+                "Custom",
+                float(self.inp_cd.text()),
+                float(self.inp_a_valve.text())
+            )
+
+                        # ----------------------------
+            # PHYSICS SANITY WARNINGS
+            # ----------------------------
+
+            warnings = []
+
+            # Burst disk may never open
+            if P_init * 2 < P_burst:
+                warnings.append(
+                    "Burst pressure may be too high compared to initial gas pressure.\n"
+                    "Valve may never open and projectile may not launch."
+                )
+
+            # Projectile heavier than piston
+            if m_proj > float(self.inp_mp.text()):
+                warnings.append(
+                    "Projectile mass larger than piston mass.\n"
+                    "This may cause unrealistic piston dynamics."
+                )
+
+            # Extremely low gas pressure
+            if P_init < 10:
+                warnings.append(
+                    "Initial gas pressure very low for a light-gas gun.\n"
+                    "Compression may be insufficient to rupture burst disk."
+                )
+
+            # HPV larger than pump tube
+            if D_hpv > D2:
+                warnings.append(
+                    "HPV diameter larger than pump tube diameter.\n"
+                    "This geometry may be non-physical."
+                )
+
+            # ----------------------------
+            # SHOW WARNING DIALOG
+            # ----------------------------
+
+            if warnings:
+
+                reply = QMessageBox.question(
+                    self,
+                    "Simulation Warning",
+                    "\n\n".join(warnings) + "\n\nContinue anyway?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+
+                if reply == QMessageBox.No:
+                    return
+            # ----------------------------
+            # SOLVER CREATION
+            # ----------------------------
+
+            solver = MultiZoneSolver(
+                L1, D1,
+                L2, D2,
+                L3, D3,
+                L_hpv, D_hpv,
+                powder,
+                gas,
+                shot
+            )
+
+
+            # ----------------------------
+            # RUN SIMULATION
+            # ----------------------------
+
+            self.btn_run.setText("COMPUTING...")
+            self.btn_run.setEnabled(False)
+
+            QApplication.processEvents()
+
             results = solver.run()
-            
-            t_arr = results['t'] * 1000
-            p1_b = results['p1'] / 1e5; p2_b = results['p2'] / 1e5; p3_b = results['p3'] / 1e5
-            vp = results['v_p']; vproj = results['v_proj']; aproj = results['a_proj']
-            xp = results['x_p']; xproj = results['x_proj']
-            
-            self.anim_data = {'t': t_arr, 'p1': p1_b, 'p2': p2_b, 'p3': p3_b, 'xp': xp, 'xproj': xproj, 'vp': vp, 'vproj': vproj}
-            self.anim_L1 = L1; self.anim_L2 = L2; self.anim_L3 = L3
-            
-            piston_peak_vel = np.max(vp) if len(vp) else 0.0
-            extrusion = np.max(xp) if len(xp) else 0.0
-            piston_final_len = 1.0 + extrusion
-            
-            proj_peak_vel = np.max(vproj) if len(vproj) else 0.0
-            muzzle_vel = vproj[-1] if len(vproj) else 0.0
-            peak_accel = np.max(aproj) if len(aproj) else 0.0
-            
-            p_ch_peak = np.max(p1_b) if len(p1_b) else 0.0
-            p_pump_peak = np.max(p2_b) if len(p2_b) else 0.0
-            p_laun_peak = np.max(p3_b) if len(p3_b) else 0.0
-            p_res_muzzle = p3_b[-1] if len(p3_b) else 0.0
-            
-            burst_time = results['burst_time'] * 1000 if results['burst_time'] >= 0 else 0.0
-            firing_time = t_arr[-1] if len(t_arr) else 0.0
-            idx_start = np.argmax(xproj > 0.0) if np.any(xproj > 0.0) else -1
-            proj_start = t_arr[idx_start] if idx_start >= 0 else 0.0
-            
-            self.res_labels['p_ch'].setText(f"{p_ch_peak:.1f}")
-            self.res_labels['p_pump'].setText(f"{p_pump_peak:.1f}")
-            self.res_labels['p_launch'].setText(f"{p_laun_peak:.1f}")
-            self.res_labels['p_peak_v'].setText(f"{piston_peak_vel:.1f}")
-            self.res_labels['p_final_l'].setText(f"{piston_final_len*1000:.1f}")
-            self.res_labels['p_extrusion'].setText(f"{extrusion*1000:.1f}")
-            self.res_labels['proj_muz'].setText(f"{muzzle_vel:.1f}")
-            self.res_labels['proj_accel'].setText(f"{peak_accel:.2e}")
-            self.res_labels['proj_impact'].setText(f"{muzzle_vel:.1f}")
-            self.res_labels['t_burst'].setText(f"{burst_time:.2f}")
-            self.res_labels['t_start'].setText(f"{proj_start:.2f}")
-            self.res_labels['t_firing'].setText(f"{firing_time:.2f}")
-            
-            ax_sp = self.res_sparks['spark_p'].axes[0]; ax_sp.clear(); ax_sp.axis('off')
-            ax_sp.plot(t_arr, p1_b, color='#f85149', lw=2); ax_sp.plot(t_arr, p2_b, color='#d29922', lw=2); ax_sp.plot(t_arr, p3_b, color='#1f6feb', lw=2); self.res_sparks['spark_p'].draw()
-            ax_spis = self.res_sparks['spark_piston'].axes[0]; ax_spis.clear(); ax_spis.axis('off')
-            ax_spis.plot(t_arr, vp, color='#1f6feb', lw=2); self.res_sparks['spark_piston'].draw()
-            ax_spr = self.res_sparks['spark_proj'].axes[0]; ax_spr.clear(); ax_spr.axis('off')
-            ax_spr.plot(t_arr, vproj, color='#2ea043', lw=2); self.res_sparks['spark_proj'].draw()
-            ax_tim = self.res_sparks['spark_time'].axes[0]; ax_tim.clear(); ax_tim.axis('off')
-            ax_tim.plot(t_arr, xproj, color='#c9d1d9', lw=2)
-            ax_tim.axvline(x=burst_time, color='#d29922', linestyle='--')
-            self.res_sparks['spark_time'].draw()
-            
-            # --- Status Validation Engine ---
-            sim_passed = True
-            
-            if muzzle_vel < 10.0:
-                self.b_status.setText("⚠ Critical Firing Failure (V_proj ~ 0)")
-                self.b_status.setStyleSheet("background-color: #f85149; color: white; padding: 8px 15px; border-radius: 4px; font-weight: bold;")
-                sim_passed = False
-            else:
-                self.b_status.setText("✔ Stable Simulation")
-                self.b_status.setStyleSheet("background-color: #2ea043; color: white; padding: 8px 15px; border-radius: 4px; font-weight: bold;")
-                
-            if p_ch_peak > 5000 or p_pump_peak > 5000:
-                self.b_pressure.setText("⚠ Critical Overpressure Warning (>5000 bar)")
-                self.b_pressure.setStyleSheet("background-color: #f85149; color: white; padding: 8px 15px; border-radius: 4px; font-weight: bold;")
-                sim_passed = False
-            elif p_laun_peak <= 0.1:
-                self.b_pressure.setText("⚠ Zero Launch Pressure Detected")
-                self.b_pressure.setStyleSheet("background-color: #f85149; color: white; padding: 8px 15px; border-radius: 4px; font-weight: bold;")
-                sim_passed = False
-            else:
-                self.b_pressure.setText("✔ Pressure Checks Nominal")
-                self.b_pressure.setStyleSheet("background-color: #2ea043; color: white; padding: 8px 15px; border-radius: 4px; font-weight: bold;")
-                
-            if burst_time <= 0:
-                self.b_valve.setText("⚠ Valve Never Opened")
-                self.b_valve.setStyleSheet("background-color: #f85149; color: white; padding: 8px 15px; border-radius: 4px; font-weight: bold;")
-                sim_passed = False
-            elif len(vp) > 0 and vp[-1] < -10.0:
-                self.b_valve.setText("⚠ Unstable Piston Bounce Detected")
-                self.b_valve.setStyleSheet("background-color: #d29922; color: white; padding: 8px 15px; border-radius: 4px; font-weight: bold;")
-            else:
-                self.b_valve.setText("✔ Valve Operated Correctly")
-                self.b_valve.setStyleSheet("background-color: #2ea043; color: white; padding: 8px 15px; border-radius: 4px; font-weight: bold;")
 
-            if not sim_passed:
-                QMessageBox.warning(self, "Sanity Check Failed", "Simulation executed but resulted in non-physical kinematic states (Zero Velocity, Failed Valve, or Extreme Overpressure).")
 
-            gas_val = self.cmb_gas.currentText()
-            self.raw_report_text = f"""----------------------------------------
-SIMULATION FINAL REPORT
-----------------------------------------
+            # ----------------------------
+            # PROCESS RESULTS
+            # ----------------------------
 
-Launcher Configuration: [Auto]
-Working Gas: [{gas_val}]
+            t_arr = results["t"] * 1000
+            p1 = results["p1"] / 1e5
+            p2 = results["p2"] / 1e5
+            p3 = results["p3"] / 1e5
 
---- PRESSURE SUMMARY ---
-Peak Chamber Pressure: {p_ch_peak:.2f} bar
-Peak Pump Pressure: {p_pump_peak:.2f} bar
-Peak Launch Pressure: {p_laun_peak:.2f} bar
-Projectile Base Peak Pressure: {p_laun_peak:.2f} bar
-Residual Muzzle Pressure: {p_res_muzzle:.2f} bar
+            xp = results["x_p"]
+            xproj = results["x_proj"]
 
---- PISTON SUMMARY ---
-Piston Peak Velocity: {piston_peak_vel:.2f} m/s
-Piston Final Length: {piston_final_len*1000:.2f} mm
-Extrusion Depth: {extrusion*1000:.2f} mm
+            vp = results["v_p"]
+            vproj = results["v_proj"]
 
---- PROJECTILE SUMMARY ---
-Projectile Peak Velocity: {proj_peak_vel:.2f} m/s
-Muzzle Velocity: {muzzle_vel:.2f} m/s
-Peak Acceleration: {peak_accel:.2e} m/s²
 
---- TIMING SUMMARY ---
-Valve Burst Time: {burst_time:.2f} ms
-Projectile Start Time: {proj_start:.2f} ms
-Firing Time: {firing_time:.2f} ms
+            self.anim_data = {
+                "t": t_arr,
+                "p1": p1,
+                "p2": p2,
+                "p3": p3,
+                "xp": xp,
+                "xproj": xproj,
+                "vp": vp,
+                "vproj": vproj
+            }
 
-----------------------------------------"""
-            
-            # --- POPULATE ANALYSIS GRAPHS ---
-            ax_p = self.canvas_a_p.axes[0]; ax_p.clear()
-            ax_p.plot(t_arr, p1_b, color='#f85149', label='Chamber', lw=2)
-            ax_p.plot(t_arr, p2_b, color='#d29922', label='Pump Tube', lw=2)
-            ax_p.plot(t_arr, p3_b, color='#1f6feb', label='Launch Tube', lw=2)
-            
-            p1_max_idx = np.argmax(p1_b)
-            p2_max_idx = np.argmax(p2_b)
-            ax_p.plot(t_arr[p1_max_idx], p1_b[p1_max_idx], 'x', color='white', markersize=10)
-            ax_p.annotate(f"Peak (Ch): {p1_b[p1_max_idx]:.0f} bar", xy=(t_arr[p1_max_idx], p1_b[p1_max_idx]), xytext=(10, 10), textcoords="offset points", color='white', fontweight='bold', bbox=dict(boxstyle="round4", fc="#21262d", ec="#f85149"))
-            
-            ax_p.plot(t_arr[p2_max_idx], p2_b[p2_max_idx], 'x', color='white', markersize=10)
-            ax_p.annotate(f"Peak (Pump): {p2_b[p2_max_idx]:.0f} bar", xy=(t_arr[p2_max_idx], p2_b[p2_max_idx]), xytext=(10, 10), textcoords="offset points", color='white', fontweight='bold', bbox=dict(boxstyle="round4", fc="#21262d", ec="#d29922"))
-            
-            ax_p.set_xlabel("Time (ms)"); ax_p.set_ylabel("Pressure (bar)")
-            ax_p.legend(loc='upper right', frameon=True, facecolor='#161b22', edgecolor='#30363d', labelcolor='#c9d1d9')
-            self.canvas_a_p.draw()
-            
-            ax_v = self.canvas_a_v.axes[0]; ax_v.clear()
-            ax_v.plot(t_arr, vp, color='#1f6feb', label='V_Piston', lw=2)
-            ax_v.plot(t_arr, vproj, color='#2ea043', label='V_Projectile', lw=2)
-            vp_max_idx = np.argmax(vp)
-            ax_v.plot(t_arr[vp_max_idx], vp[vp_max_idx], 'x', color='white', markersize=10)
-            ax_v.annotate(f"Peak: {vp[vp_max_idx]:.0f} m/s", xy=(t_arr[vp_max_idx], vp[vp_max_idx]), xytext=(10, 10), textcoords="offset points", color='white', fontweight='bold', bbox=dict(boxstyle="round4", fc="#21262d", ec="#1f6feb"))
-            
-            ax_v.set_xlabel("Time (ms)"); ax_v.set_ylabel("Velocity (m/s)")
-            ax_v.legend(loc='upper left', frameon=True, facecolor='#161b22', edgecolor='#30363d', labelcolor='#c9d1d9')
-            self.canvas_a_v.draw()
-            
-            ax_x = self.canvas_a_x.axes[0]; ax_x.clear()
-            ax_x.plot(t_arr, xp, color='#1f6feb', label='X_Piston', lw=2)
-            ax_x.plot(t_arr, xproj, color='#2ea043', label='X_Projectile', lw=2)
-            ax_x.axvline(x=burst_time, color='#d29922', linestyle='--', label='Valve Burst')
-            ax_x.set_xlabel("Time (ms)"); ax_x.set_ylabel("Position (m)")
-            ax_x.legend(loc='upper left', frameon=True, facecolor='#161b22', edgecolor='#30363d', labelcolor='#c9d1d9')
-            self.canvas_a_x.draw()
-            
-            ax_e = self.canvas_a_e.axes[0]; ax_e.clear()
-            if 'e_powder' in results:
-                ax_e.plot(t_arr, results['e_powder']/1e3, color='#c9d1d9', label='E_Powder (Total)', lw=2, linestyle='--')
-                ax_e.plot(t_arr, results['e_gas']/1e3, color='#f85149', label='E_Gas (Thermal)', lw=2)
-                ax_e.plot(t_arr, results['e_ke_piston']/1e3, color='#1f6feb', label='KE_Piston', lw=2)
-                ax_e.plot(t_arr, results['e_ke_proj']/1e3, color='#2ea043', label='KE_Projectile', lw=2)
-                ax_e.plot(t_arr, results['e_loss']/1e3, color='#8b949e', label='E_Loss (Leak/Heat)', lw=2)
-                ax_e.set_xlabel("Time (ms)"); ax_e.set_ylabel("Energy (kJ)")
-                ax_e.legend(loc='upper left', frameon=True, facecolor='#161b22', edgecolor='#30363d', labelcolor='#c9d1d9')
-                self.canvas_a_e.draw()
+            self.anim_L1 = L1
+            self.anim_L2 = L2
+            self.anim_L_hpv = L_hpv
+            self.anim_L3 = L3
 
-            self.lbl_sim_status.setText("Simulation Complete.")
-            self.lbl_sim_status.setStyleSheet("color: #2ea043; font-size: 16px; font-style: italic; padding-left: 20px;")
+
+            self.lbl_sim_status.setText("Simulation Complete")
+            self.lbl_sim_status.setStyleSheet("color:#2ea043")
+
             self.play_animation()
-            
+
+
         except Exception as e:
-            self.lbl_sim_status.setText("Simulation Failed")
-            self.lbl_sim_status.setStyleSheet("color: #f85149; font-size: 16px; font-style: italic; padding-left: 20px;")
+
+            QMessageBox.critical(self, "Simulation Error", str(e))
+
         finally:
+
             self.btn_run.setText("RUN SIMULATION")
             self.btn_run.setEnabled(True)
-
     def export_report(self):
         if not self.raw_report_text:
             QMessageBox.warning(self, "Export Failed", "Please run a simulation before exporting.")
@@ -946,7 +1033,16 @@ Firing Time: {firing_time:.2f} ms
             QMessageBox.critical(self, "Export Failed", str(e))
 
     def play_animation(self):
-        self.canvas_anim.setup_scene(self.anim_L1, self.anim_L2, self.anim_L3, float(self.inp_D1.text()), float(self.inp_D2.text()), float(self.inp_D3.text()))
+        self.canvas_anim.setup_scene(
+        self.anim_L1,
+        self.anim_L2,
+        self.anim_L_hpv,
+        self.anim_L3,
+        float(self.inp_D1.text()),
+        float(self.inp_D2.text()),
+        float(self.inp_D_hpv.text()),
+        float(self.inp_D3.text())
+        )
         self.anim_index = 0
         self.anim_timer.start(25) 
 
@@ -961,8 +1057,17 @@ Firing Time: {firing_time:.2f} ms
             vp = self.anim_data['vp'][self.anim_index]
             vproj = self.anim_data['vproj'][self.anim_index]
             
-            self.canvas_anim.update_positions(xp, xproj, self.anim_L1, self.anim_L2, self.anim_L3, p1, p2, p3)
-            
+            self.canvas_anim.update_positions(
+            xp,
+            xproj,
+            self.anim_L1,
+            self.anim_L2,
+            self.anim_L_hpv,
+            self.anim_L3,
+            p1,
+            p2,
+            p3
+        )
             self.live_lbls[0].setText(f"Time: {t:.2f} ms")
             self.live_lbls[1].setText(f"P_ch: {p1:.0f} bar")
             self.live_lbls[2].setText(f"P_pump: {p2:.0f} bar")
