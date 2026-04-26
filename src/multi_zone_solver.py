@@ -41,20 +41,6 @@ class MultiZoneSolver:
         self.V_hpv = self.A_hpv * L_hpv
         self.V_launch = self.A_launch * 0.001
 
-        # ---------------- MASSES ----------------
-
-        self.m_ch = 1e-6
-        self.m_pump = 1e-6
-        self.m_hpv = 1e-6
-        self.m_launch = 1e-6
-
-        # ---------------- ENERGIES ----------------
-
-        self.U_ch = 1e3
-        self.U_pump = 1e3
-        self.U_hpv = 1e3
-        self.U_launch = 1e3
-
         # ---------------- PRESSURES ----------------
 
         self.P_ch = 1e5
@@ -63,6 +49,24 @@ class MultiZoneSolver:
         self.P_launch = shot.residual_gas_pressure
 
         self.T_launch = shot.residual_gas_temp
+        
+        # ---------------- MASSES ----------------
+
+        self.m_ch = 1e-6
+        self.m_pump = self.P_pump * self.V_pump / (self.gas.R_specific * 300)
+        self.m_hpv = self.P_hpv * self.V_hpv / (self.gas.R_specific * 300)
+        self.m_launch = self.P_launch * self.V_launch / (self.gas.R_specific * self.T_launch)
+
+        # ---------------- ENERGIES ----------------
+
+        self.U_ch = 1e3
+        T_init = 300
+        self.U_pump = self.m_pump * self.gas.cv * T_init
+        T_init = 300
+        self.U_hpv = self.m_hpv * self.gas.cv * T_init
+        self.U_launch = self.m_launch * self.gas.cv * self.T_launch
+
+        
 
         # ---------------- PISTON ----------------
 
@@ -88,7 +92,8 @@ class MultiZoneSolver:
 
         self.N_cells = 20
 
-        self.rho_cells = np.ones(self.N_cells) * 1.0
+        rho_init = self.m_pump / self.V_pump
+        self.rho_cells = np.ones(self.N_cells) * rho_init
         self.u_cells = np.zeros(self.N_cells)
         self.P_cells = np.ones(self.N_cells) * self.P_pump
 
@@ -111,11 +116,27 @@ class MultiZoneSolver:
             denom = 1e-6
 
         return rho * self.gas.R_specific * T / denom
+    # --------------------------------------------------
 
+    def virial_eos(self, rho, T):
+
+        B = -1e-4
+        C = 1e-7
+
+        return rho * self.gas.R_specific * T * (1 + B*rho + C*rho**2)
     # --------------------------------------------------
 
     def step(self):
+        # ---------- ADAPTIVE TIMESTEP ----------
 
+        a_sound = math.sqrt(self.gas.gamma * self.gas.R_specific * 300)
+
+        dx = max(self.V_pump / self.A_pump / self.N_cells, 1e-6)
+
+        self.dt = min(
+            5e-7,
+            0.5 * dx / (abs(self.v_p) + a_sound)
+        )
         # ---------- POWDER BURN ----------
 
         if self.powder.z < 1:
@@ -143,23 +164,68 @@ class MultiZoneSolver:
         T_ch = self.U_ch / (self.m_ch * self.cv_powder)
         rho_ch = self.m_ch / self.V_ch
 
-        self.P_ch = self.noble_abel(rho_ch, T_ch)
+        
 
+        # ---------- HEAT TRANSFER ----------
+
+        h = 200
+        A_wall = self.A_ch * 4
+        T_wall = 300
+
+        Qdot = h * A_wall * (T_ch - T_wall)
+        dQ = Qdot * self.dt
+
+        self.U_ch -= dQ
+        self.e_heat_loss += dQ
+
+        T_ch = self.U_ch / (self.m_ch * self.cv_powder)
+
+        self.P_ch = self.virial_eos(rho_ch, T_ch)
         # ---------- PISTON ----------
 
-        F = (self.P_ch - self.P_cells[0]) * self.A_pump
+        F = max(0, self.P_ch - self.P_pump) * self.A_pump
 
         self.a_p = F / self.shot.piston_mass
 
         self.v_p += self.a_p * self.dt
+        self.v_p *= 0.999
         self.v_p = max(min(self.v_p, 2000), -2000)
         self.x_p += self.v_p * self.dt
 
         dx = self.v_p * self.dt
 
+        V_old = self.V_pump
+
         self.V_pump = max(self.V_pump - self.A_pump * dx, 1e-8)
         self.V_ch = max(self.V_ch + self.A_pump * dx, 1e-8)
 
+        # --- isentropic compression heating ---
+        compression_ratio = V_old / self.V_pump
+
+        self.P_pump *= compression_ratio ** self.gas.gamma
+        self.U_pump *= compression_ratio ** (self.gas.gamma - 1)
+        # update first pump cell due to piston compression
+        self.P_cells[0] = self.P_pump
+        rho_new = self.m_pump / max(self.V_pump, 1e-6)
+        self.rho_cells[0] = rho_new
+                        # ---------- PISTON SEAL LEAKAGE ----------
+
+        if self.P_ch > self.P_cells[0]:
+
+            C_l = 0.01
+            A_seal = self.A_pump * 0.001
+
+            rho = self.m_ch / max(self.V_ch,1e-6)
+
+            m_leak = C_l * A_seal * math.sqrt(2 * rho * (self.P_ch - self.P_cells[0]))
+
+            dm = m_leak * self.dt
+            dm = min(dm, self.m_ch)
+
+            self.m_ch -= dm
+            self.m_pump += dm
+
+            self.e_leak_loss += dm * self.gas.cv * 300
         # ---------- SHOCK ----------
 
         a = math.sqrt(self.gas.gamma * self.gas.R_specific * T_ch)
@@ -180,16 +246,18 @@ class MultiZoneSolver:
 
         # ---------- 1D EULER GAS DYNAMICS ----------
 
-        self.rho_cells, self.u_cells, self.P_cells = euler_step(
-            self.rho_cells,
-            self.u_cells,
-            self.P_cells,
-            self.gas.gamma,
-            dx=0.2,
-            dt=self.dt
-        )
+        dx_cells = max(self.V_pump / self.A_pump / self.N_cells, 1e-6)
 
-        self.P_pump = self.P_cells[-1]
+        self.rho_cells, self.u_cells, self.P_cells = euler_step(
+    self.rho_cells,
+    self.u_cells,
+    self.P_cells,
+    self.gas.gamma,
+    dx=dx_cells,
+    dt=self.dt
+)
+
+        self.P_pump = self.P_cells[0]
 
         # ---------- HPV ----------
 
@@ -197,7 +265,7 @@ class MultiZoneSolver:
         T_hpv = self.U_hpv / max(self.m_hpv * self.gas.cv, 1e-6)
         self.P_hpv = self.noble_abel(rho_hpv, T_hpv)
 
-        if self.P_pump > self.P_hpv:
+        if self.P_pump > self.P_hpv * 1.01:
 
             m_dot = mass_flow_rate(
                 self.P_pump,
@@ -211,6 +279,8 @@ class MultiZoneSolver:
 
             dm = m_dot * self.dt
 
+            
+            dm = min(dm, self.m_pump)
             self.m_pump -= dm
             self.m_hpv += dm
 
@@ -241,6 +311,7 @@ class MultiZoneSolver:
             )
 
             dm = m_dot * self.dt
+            dm = min(dm, self.m_hpv * 0.1)
 
             self.m_hpv -= dm
             self.m_launch += dm
@@ -267,7 +338,13 @@ class MultiZoneSolver:
 
             P_eff = self.P_launch * max(0.1, 1 - (self.gas.gamma-1)/2 * Mach**2)
 
-            F = P_eff * self.A_launch
+            rho_launch = self.m_launch / max(self.V_launch,1e-6)
+
+            Cd_proj = 0.3
+
+            F_drag = 0.5 * Cd_proj * rho_launch * abs(self.v_proj) * self.v_proj * self.A_launch
+
+            F = P_eff * self.A_launch - F_drag
 
             self.a_proj = F / self.shot.projectile_mass
 
@@ -308,10 +385,10 @@ class MultiZoneSolver:
         keproj=[]
         el=[]
 
-        max_steps=int(0.02/self.dt)
+        max_steps=int(0.01/self.dt)
 
         for i in range(max_steps):
-
+            
             stop = self.step()
 
             # ---- solver stability check ----
